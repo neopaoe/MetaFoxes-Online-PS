@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meta Foxes Head 合成器 - 像素级完美版</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #111;
+            font-family: Arial;
+            text-align: center;
+            color: #fff;
+        }
+
+        #container {
+            max-width: 95vw;
+            max-height: 85vh;
+            margin: 20px auto;
+            display: inline-block;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #e91e63;
+            color: white;
+            border: none;
+            border-radius: 6px;
+        }
+
+        .btn:hover {
+            background: #c2185b;
+        }
+
+        input[type=number] {
+            width: 100px;
+            padding: 10px;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        #status {
+            color: #0f0;
+            margin: 10px;
+            min-height: 24px;
+            font-weight: bold;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+</head>
+
+<body>
+    <h1>Meta Foxes Head 合成器</h1>
+
+    <input type="file" id="upload-bg" accept="image/*"><br><br>
+
+    <input type="number" id="png-number" min="1" max="222" placeholder="编号 1-222">
+    <button class="btn" id="add-png">添加 Head</button>
+    <button class="btn" id="clear-all">清空所有</button>
+    <!-- 新增的青色说明文字 -->
+    <div style="margin: 12px 0; color: #00FFFF; font-size: 15px; font-weight: bold;">
+        1-99 号小狐狸，请输入两位数（如 01、08、56）<br>
+        100-222 号小狐狸，直接输入三位数（如 100、168、222）
+    </div>
+    <br>
+    <div id="status"></div>
+
+    <div id="container"><canvas id="canvas"></canvas></div>
+
+    <br>
+    <button class="btn" id="flip-x">水平翻转</button>
+    <button class="btn" id="flip-y">垂直翻转</button>
+    <button class="btn" id="to-front">置顶</button>
+    <button class="btn" id="to-back">置底</button>
+    <button class="btn" style="font-size:20px;padding:15px 40px;" id="download">下载高清JPG</button>
+
+    <script>
+        const canvas = new fabric.Canvas('canvas', { backgroundColor: '#000' });
+        const status = document.getElementById('status');
+
+        let originalWidth = 0, originalHeight = 0;
+        let displayScale = 1;
+        let bgImage = null;
+
+        function getHeadUrl(num) {
+            const folder = num < 100 ? String(num).padStart(2, '0') : String(num);
+            return `https://raw.githubusercontent.com/Next-DAO/meta-foxes-contract/main/parts/${folder}/head.png`;
+        }
+
+        // 上传底图
+        document.getElementById('upload-bg').addEventListener('change', e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = ev => {
+                fabric.Image.fromURL(ev.target.result, img => {
+                    bgImage = img;
+                    originalWidth = img.width;
+                    originalHeight = img.height;
+
+                    displayScale = Math.min(
+                        (window.innerWidth * 0.95) / originalWidth,
+                        (window.innerHeight * 0.85) / originalHeight,
+                        1
+                    );
+
+                    canvas.setDimensions({
+                        width: originalWidth * displayScale,
+                        height: originalHeight * displayScale
+                    });
+
+                    canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
+                        scaleX: displayScale,
+                        scaleY: displayScale,
+                        selectable: false,
+                        evented: false
+                    });
+
+                    canvas.clear();
+                    canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
+                        scaleX: displayScale, scaleY: displayScale,
+                        selectable: false, evented: false
+                    });
+
+                    status.textContent = '底图加载完成，可添加 Head';
+                });
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // 添加 Head
+        document.getElementById('add-png').onclick = () => {
+            const num = parseInt(document.getElementById('png-number').value);
+            if (!num || num < 1 || num > 222) return alert('请输入 1-222');
+            status.textContent = `加载 #${num}...`;
+
+            fabric.Image.fromURL(getHeadUrl(num), img => {
+                const s = Math.min(0.7, 350 / Math.max(img.width, img.height));
+                img.set({
+                    left: canvas.width * 0.3,
+                    top: canvas.height * 0.3,
+                    scaleX: s,
+                    scaleY: s,
+                    cornerStyle: 'circle',
+                    cornerColor: '#00ff00'
+                });
+                canvas.add(img);
+                canvas.setActiveObject(img);
+                status.textContent = `#${num} 添加成功`;
+                document.getElementById('png-number').value = '';
+            }, { crossOrigin: 'anonymous' });
+        };
+
+        // 快捷操作
+        document.getElementById('flip-x').onclick = () => { const o = canvas.getActiveObject(); if (o) o.toggle('flipX'), canvas.renderAll(); };
+        document.getElementById('flip-y').onclick = () => { const o = canvas.getActiveObject(); if (o) o.toggle('flipY'), canvas.renderAll(); };
+        document.getElementById('to-front').onclick = () => { const o = canvas.getActiveObject(); if (o) canvas.bringToFront(o); };
+        document.getElementById('to-back').onclick = () => { const o = canvas.getActiveObject(); if (o) canvas.sendToBack(o); };
+        document.getElementById('clear-all').onclick = () => {
+            if (confirm('清空所有 Head？')) canvas.remove(...canvas.getObjects());
+        };
+
+        // 终极下载方案：让 Fabric 自己渲染到原始尺寸
+        document.getElementById('download').onclick = () => {
+            if (!bgImage) return alert('请先上传底图！');
+
+            // 创建一个隐藏的临时 Fabric canvas（原始尺寸）
+            const exportCanvas = new fabric.Canvas(document.createElement('canvas'), {
+                width: originalWidth,
+                height: originalHeight,
+                backgroundColor: '#000'
+            });
+
+            // 底图 1:1 放进去
+            exportCanvas.setBackgroundImage(bgImage, exportCanvas.renderAll.bind(exportCanvas), {
+                scaleX: 1,
+                scaleY: 1,
+                selectable: false,
+                evented: false
+            });
+
+            // 把当前所有 Head 按比例放大后放进去
+            canvas.getObjects().forEach(obj => {
+                const cloned = fabric.util.object.clone(obj);
+                cloned.set({
+                    left: obj.left / displayScale,
+                    top: obj.top / displayScale,
+                    scaleX: obj.scaleX / displayScale,
+                    scaleY: obj.scaleY / displayScale,
+                    // angle, flipX, flipY 等属性自动保留
+                });
+                exportCanvas.add(cloned);
+            });
+
+            exportCanvas.renderAll();
+
+            // 导出
+            const link = document.createElement('a');
+            link.download = `MetaFoxes_${Date.now()}.jpg`;
+            link.href = exportCanvas.toDataURL({ format: 'jpeg', quality: 0.98 });
+            link.click();
+
+            // 清理临时 canvas
+            exportCanvas.dispose();
+
+            status.textContent = '像素级完美高清图已下载！';
+        };
+
+        // 回车添加
+        document.getElementById('png-number').addEventListener('keypress', e => {
+            if (e.key === 'Enter') document.getElementById('add-png').click();
+        });
+    </script>
+</body>
+
+</html>
